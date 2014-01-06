@@ -1,0 +1,22 @@
+<html>
+<head>
+<style type="text/css" src="main.css"></style>
+</head>
+<body>
+<div class="body">
+<p class="login">You are logged in as jk</p>
+<form>
+  <div class="request_1">
+    <h1>1</h1>
+    <textarea class="millennium_box_1">Paste millennium info here.</textarea>
+    <input class="location_code_1" type="text" value="Location Code" />
+    <select name="requesting_location" class="locations requesting_location_1">
+      <option value="">Where are you?</option>
+    </select>
+    <textarea class="notes_1">Notes, such as vol number or patron name.</textarea>    
+  </div>
+  <input type="submit" class="submit" value="Refresh" name="refresh" onclick="google.script.run.withFailureHandler(onFailure).refresh();" />
+</form>
+</div>
+</body>
+</html>
