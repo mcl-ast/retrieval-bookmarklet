@@ -13,90 +13,54 @@
 		req.send();
 		
 		function parseItemDetails() {
-			var item = {location: [], callNumber: [], volume: [], title: ''},
-				html = this.responseText.replace(/[\n\r]/g, ''),
-				begin, end = 0 , i = 0, attrFound, tagFound,
-				getContents = function getContents(tag, attr) {
-					console.log('BEGIN getContents: ' + i + '  ' + tag + (attr ? ' "' + attr + '"' : ''));
-					if (attr) {
-						while (i < html.length) {
-							attrFound = html.indexOf(attr, i);
-							if (attrFound === -1) return null;
-							// move pointer forward to current attribute.
-							i = attrFound;
-							// Go back to ensure the tagname matches for the given attribute
-							if (html.substr(html.lastIndexOf('<', attrFound) + 1, tag.length + 1).match(tag + ' ') === null) {
-								continue;
-							} else {
-								tagFound = attrFound;
+			var item = {location: [], callNumber: [], volume: [], status: [], title: ''},
+				cleanHTML = function(s) {
+					return s.replace(/^\s+/, '').replace(/[\s-]+$/, '').replace('&amp;', '&');
+				},
+				table, ths, tds, locationIndex, callIndex, volumeIndex, statusIndex, i, j; 
+			
+			// Make element to put the html content into for content extraction	
+			var el = document.createElement('div');
+			el.innerHTML = this.responseText; 
+			var headings = el.getElementsByTagName('h1');
+			for (i = 0; i < headings.length; i += 1) {
+				if (headings[i].getAttribute('id') === 'aria_bib_title') item.title = cleanHTML(headings[i].innerHTML);
+				if (headings[i].getAttribute('class') === 'group_heading' && headings[i].innerHTML.search('Not available at this time') === -1) {
+					format(headings[i].innerHTML);
+					table = headings[i].nextSibling;
+					while (table.tagName !== 'TABLE') table = table.nextSibling;
+					ths = table.getElementsByTagName('th');
+					tds = table.getElementsByTagName('td');
+					for (j = 0; j < ths.length; j += 1) {
+						switch (ths[j].innerHTML) {
+							case 'Collection':
+								locationIndex = j;
 								break;
-							}
-						}
-					} else {
-						tagFound = html.indexOf('<' + tag, i);
-						console.log ('tagFound: ' + tagFound + ' ' + html.substr(tagFound, 10));
-						console.log ('i: ' + i);
-						while (!html[tagFound + tag.length + 1].match(/[\s>]/)) {
-							i = tagFound;
-							console.log('i: ' + i);
-							tagFound = html.indexOf('<' + tag, i);
+							case 'Volume':
+								volumeIndex = j;
+								break;
+							case 'Call Number':
+								callIndex = j;
+								break
+							case 'Status':
+								statusIndex = j;
+								break;
+							default: break;
 						}
 					}
-					begin = 1 + html.indexOf('>', tagFound);
-					end = html.indexOf('</', begin);
-					i = end + 1;
-					console.log('END getContents: ' + i + '  ' + html.substring(begin, end));
-					return html.substring(begin, end);
-				};
-			item.title = getContents('h1', 'aria_bib_title');
-			// 6 seems to offset the ' -- ' at the end of the title here
-			item.title = item.title.substring(0, item.title.length - 6);
-			console.log('title: "' + item.title + '"');
-			console.log('html string length: ' + html.length);
-			// Exclude unavailable items in results
-			var locationIndex, callIndex, volumeIndex, rowMarker, tableMarker, inspect, counter, group;
-			var d1 = d2 = d3 = d4 = d5 = 0;
-			var debug = function debug(level) {
-				console.log('\nBroken at ' + level + 
-					'\nd1: ' + d1 + ' d2: ' + d2 + ' d3: ' + d3 + ' d4: ' + d4 +
-					'\nValue of i: ' + i);
-			}
-			group = getContents('h1', 'group_heading');
-			while (group && group.search('Not available') === -1) {
-				if (++d1 > 3) {debug(1); console.log(item); break;}
-				// Set rowMarker to last </th> of <thead> (& <tr>)
-				rowMarker = html.lastIndexOf('</th>', html.indexOf('</tr>', i));
-				//console.log('rowMarker: ' + rowMarker + '  ' + html.substr(rowMarker, 100));
-				//console.log('i: ' + html.substr(i, 100));
-				counter = 1;
-				while (i < rowMarker) {
-					if (++d2 > 100) {debug(2); break;}
-					inspect = getContents('th');
-					if (inspect === 'Collection') locationIndex = counter;
-					if (inspect === 'Volume') volumeIndex = counter;
-					if (inspect === 'Call Number') callIndex = counter;
-					counter += 1;
-				}
-				console.log('Counter after setting indicies: ' + counter +
-					'\nlIndex: ' + locationIndex + ' vIndex: ' + volumeIndex + ' cIndex: ' + callIndex);
-				i = html.indexOf('<tbody', i);
-				tableMarker = html.lastIndexOf('</tr>', html.indexOf('</tbody>', rowMarker));
-				while (i < tableMarker) {
-					if (++d3 > 20) {debug(3); console.log(html.substr(2100, 50)); break;}
-					rowMarker = html.lastIndexOf('</td>', html.indexOf('</tr>', i));
-					counter = 1;
-					while (i < rowMarker) {
-						if (++d4 > 100) {debug(4); break;}
-						inspect = getContents('td');
-						if (counter === locationIndex) item.location.push(inspect);
-						if (counter === volumeIndex) item.volume.push(inspect);
-						if (counter === callIndex) item.callNumber.push(inspect);
+					// go over table rows by headings length, add indexes for heading values
+					for (j = 0; j < tds.length; j += ths.length) {
+						if (locationIndex !== undefined) item.location.push(cleanHTML(tds[j + locationIndex].innerHTML));
+						if (volumeIndex !== undefined) item.volume.push(cleanHTML(tds[j + volumeIndex].innerHTML));
+						if (callIndex !== undefined) item.callNumber.push(cleanHTML(tds[j + callIndex].innerHTML));
+						if (statusIndex !== undefined) item.status.push(cleanHTML(tds[j + statusIndex].innerHTML));
 					}
 				}
-				group = getContents('h1', 'group_heading');
 			}
 			console.log(JSON.stringify(item));
-		}
+			copyToClipboard(JSON.stringify(item));
+		} // END parseItemDetails()
+		
 /*		
 // Scrape screen if ajax call fails:		
 		(function (item) {
@@ -120,8 +84,78 @@
 		})(item);
 */		
 // WebPAC selection:
-	} else if (url.match(urlRegexp(opacURL))) {}
-//	copyToClipboard(JSON.stringify(item));
+	} else if (url.match(urlRegexp(opacURL))) {
+		// Get title first
+		var item = {location: [], callNumber: [], volume: [], status: [], title: ''};
+		// if there's a link for more due dates, use that instead...
+		var forms = document.getElementsByTagName('form'), 
+			links, i, j, src;
+		for (i = 0; i < forms.length; i += 1) {
+			links = forms[i].getElementsByTagName('input');
+			for (j = 0; j < links.length; j += 1) {
+				if (links[j].getAttribute('value') && links[j].getAttribute('value').indexOf('View additional copies') > -1) {
+					src = forms[i].getAttribute('action');
+					req = new XMLHttpRequest();
+					req.onload = parseOPACItemDetails;
+					req.open('post', src);
+					req.send();
+					
+					function parseOPACItemDetails() {
+						var item = {location: [], callNumber: [], volume: [], status: [], title: ''},
+						cleanHTML = function(s) {
+							return s.replace(/^\s+|[\s-]+$|<!--[\w\s]+-->|<[^>]+>|&nbsp;/g, '').replace('&amp;', '&');
+						},
+						el = document.createElement('div');
+						el.innerHTML = this.responseText;
+						var table = el.getElementsByTagName('table')[0];
+						var tds = table.getElementsByTagName('td');
+						var i, j;
+						
+						for (i = 0; i < tds.length; i += 3) {
+							item.location.push(cleanHTML(tds[i].innerHTML));
+							item.callNumber.push(cleanHTML(tds[i + 1].innerHTML));
+							item.status.push(cleanHTML(tds[i + 2].innerHTML));
+						}
+						console.log(JSON.stringify(item));
+					}
+					return;
+				}
+			}
+		}
+		
+		var tables = document.getElementsByTagName('table'),
+			cleanHTML = function(s) {
+				return s.replace(/^\s+|[\s-]+$|<!--[\w\s]+-->|<[^>]+>|&nbsp;/g, '').replace('&amp;', '&');
+			},
+			trs, tds, k;
+				
+		for (i = 0; i < tables.length; i += 1) {
+			if (tables[i].getAttribute('class') === 'bibItems') {
+				trs = tables[i].getElementsByTagName('tr');
+				for (j = 0; j < trs.length; j += 1) {
+					tds = trs[j].getElementsByTagName('td');
+					if (tds.length > 0 && tds[2].innerHTML.indexOf('DUE') === -1) {
+						// get Location
+						item.location.push(cleanHTML(tds[0].innerHTML));
+						// get Call Number
+						item.callNumber.push(cleanHTML(tds[1].innerHTML));
+						// get Status
+						item.status.push(cleanHTML(tds[2].innerHTML));
+					}
+				} // get Title ->
+			} else if (tables[i].getAttribute('class') === 'bibDetail') {
+				tds = tables[i].getElementsByTagName('td');
+				for (j = 0; j < tds.length; j += 1) {
+					if (tds[j].getAttribute('class') === 'bibInfoLabel' && tds[j].innerHTML && tds[j].innerHTML.indexOf('Title') === 0) {
+						while (tds[++j].getAttribute('class') !== 'bibInfoData');
+						item.title = cleanHTML(tds[j].innerHTML);
+						break;
+					}
+				}
+			}
+		}
+		console.log(JSON.stringify(item));
+	}
 	
 	function copyToClipboard (text) {
 	  window.prompt ("Copy to clipboard: Ctrl+C, Enter", text);
@@ -141,5 +175,8 @@
 			version: scriptInfo.version,
 			script: '(function(){function s(e){window.prompt("Copy to clipboard: Ctrl+C, Enter",e)}var e={location:[],callNumber:[],title:""},t=document.getElementsByTagName("div"),n={version:"1.0"},r,i;for(r=0;r<t.length;r+=1){if((" "+t[r].className+" ").indexOf(" "+"branchInfo"+" ")>-1){i=t[r].getElementsByTagName("span");e.location.push(i[1].innerHTML);e.callNumber.push(i[3].innerHTML)}if((" "+t[r].className+" ").indexOf(" "+"titleBlock"+" ")>-1){e.title=t[r].getElementsByTagName("h1")[0].innerHTML}}s(JSON.stringify(e))})()'
 		});
+	}
+	function format(string) {
+		console.log('"' + string + '"');
 	}
 })();
